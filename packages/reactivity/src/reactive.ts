@@ -16,11 +16,11 @@ import { ReactiveFlags } from './constants'
 import { warn } from './warning'
 
 export interface Target {
-  [ReactiveFlags.SKIP]?: boolean
-  [ReactiveFlags.IS_REACTIVE]?: boolean
-  [ReactiveFlags.IS_READONLY]?: boolean
-  [ReactiveFlags.IS_SHALLOW]?: boolean
-  [ReactiveFlags.RAW]?: any
+  [ReactiveFlags.SKIP]?: boolean // 是否跳过？
+  [ReactiveFlags.IS_REACTIVE]?: boolean // 是否响应式
+  [ReactiveFlags.IS_READONLY]?: boolean //  是否只读
+  [ReactiveFlags.IS_SHALLOW]?: boolean //  是否浅层
+  [ReactiveFlags.RAW]?: any //  对象的原始数据
 }
 
 export const reactiveMap = new WeakMap<Target, any>()
@@ -49,6 +49,8 @@ function targetTypeMap(rawType: string) {
   }
 }
 
+// 判断数据类型，如果对象可跳过、不可扩展，就返回0，否则就根据数据类型返回
+// 默认返回0，对象和数组返回1，map、set、weakmap、weakset返回2
 function getTargetType(value: Target) {
   return value[ReactiveFlags.SKIP] || !Object.isExtensible(value)
     ? TargetType.INVALID
@@ -78,6 +80,7 @@ export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRefSimple<T>
 export function reactive<T extends object>(target: T): UnwrapNestedRefs<T>
 export function reactive(target: object) {
   // if trying to observe a readonly proxy, return the readonly version.
+  // 如果尝试观察一个只读代理，就返回只读版本
   if (isReadonly(target)) {
     return target
   }
@@ -241,9 +244,10 @@ export function shallowReadonly<T extends object>(target: T): Readonly<T> {
   )
 }
 
+// 创建一个响应式对象
 function createReactiveObject(
-  target: Target,
-  isReadonly: boolean,
+  target: Target, // 源数据
+  isReadonly: boolean, // 是否是只读对象
   baseHandlers: ProxyHandler<any>,
   collectionHandlers: ProxyHandler<any>,
   proxyMap: WeakMap<Target, any>,
@@ -263,15 +267,18 @@ function createReactiveObject(
     return target
   }
   // target already has corresponding Proxy
+  // 源数据已经有响应的代理
   const existingProxy = proxyMap.get(target)
   if (existingProxy) {
     return existingProxy
   }
   // only specific value types can be observed.
+  // 只能观察特定的值类型
   const targetType = getTargetType(target)
   if (targetType === TargetType.INVALID) {
     return target
   }
+  // 核心，使用proxy，如果类型为2，就使用collectionHandlers，否则使用baseHandlers（也就是数据类型为数组和对象）
   const proxy = new Proxy(
     target,
     targetType === TargetType.COLLECTION ? collectionHandlers : baseHandlers,
@@ -309,9 +316,11 @@ export function isReactive(value: unknown): boolean {
  * Checks whether the passed value is a readonly object. The properties of a
  * readonly object can change, but they can't be assigned directly via the
  * passed object.
+ * 检查传递的值是否一个只读对象。只对对象属性可以更改，但不能通过传递的对象直接分配
  *
  * The proxies created by {@link readonly()} and {@link shallowReadonly()} are
  * both considered readonly, as is a computed ref without a set function.
+ * 由readonly和shallowReadonly创建的代理都被认为是只读的，类似没有set函数的计算引用一样
  *
  * @param value - The value to check.
  * @see {@link https://vuejs.org/api/reactivity-utilities.html#isreadonly}
