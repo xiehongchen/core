@@ -60,10 +60,12 @@ export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRefSimple<T>
 
 /**
  * Returns a reactive proxy of the object.
+ * 返回一个响应式代理对象
  *
  * The reactive conversion is "deep": it affects all nested properties. A
  * reactive object also deeply unwraps any properties that are refs while
  * maintaining reactivity.
+ * 这个响应式转换是深度的，它影响所有的嵌套属性，响应式对象在保存响应的同时，也会深入打开所有属性
  *
  * @example
  * ```js
