@@ -45,6 +45,7 @@ import { type Directive, validateDirectiveName } from './directives'
 import {
   type ComponentOptions,
   type ComputedOptions,
+  type MergedComponentOptions,
   type MethodOptions,
   applyOptions,
   resolveMergedOptions,
@@ -222,7 +223,7 @@ export type Component<
 
 export type { ComponentOptions }
 
-type LifecycleHook<TFn = Function> = TFn[] | null
+export type LifecycleHook<TFn = Function> = (TFn & SchedulerJob)[] | null
 
 // use `E extends any` to force evaluating type to fix #2362
 export type SetupContext<
@@ -233,7 +234,9 @@ export type SetupContext<
       attrs: Data
       slots: UnwrapSlotsType<S>
       emit: EmitFn<E>
-      expose: (exposed?: Record<string, any>) => void
+      expose: <Exposed extends Record<string, any> = Record<string, any>>(
+        exposed?: Exposed,
+      ) => void
     }
   : never
 
@@ -319,7 +322,7 @@ export interface ComponentInternalInstance {
    * after initialized (e.g. inline handlers)
    * @internal
    */
-  renderCache: (Function | VNode)[]
+  renderCache: (Function | VNode | undefined)[]
 
   /**
    * Resolved component registry, only for components with mixins or extends
@@ -524,6 +527,12 @@ export interface ComponentInternalInstance {
    * @internal
    */
   getCssVars?: () => Record<string, string>
+
+  /**
+   * v2 compat only, for caching mutated $options
+   * @internal
+   */
+  resolvedOptions?: MergedComponentOptions
 }
 
 const emptyAppContext = createAppContext()
@@ -557,6 +566,7 @@ export function createComponentInstance(
     exposed: null,
     exposeProxy: null,
     withProxy: null,
+
     provides: parent ? parent.provides : Object.create(appContext.provides),
     accessCache: null!,
     renderCache: [],
@@ -775,8 +785,7 @@ function setupStatefulComponent(
   // 0. create render proxy property access cache
   instance.accessCache = Object.create(null)
   // 1. create public instance / render proxy
-  // also mark it raw so it's never observed
-  instance.proxy = markRaw(new Proxy(instance.ctx, PublicInstanceProxyHandlers))
+  instance.proxy = new Proxy(instance.ctx, PublicInstanceProxyHandlers)
   if (__DEV__) {
     exposePropsOnRenderContext(instance)
   }
@@ -1000,41 +1009,33 @@ export function finishComponentSetup(
                 : ``) /* should not happen */,
       )
     } else {
-      warn(`Component is missing template or render function.`)
+      warn(`Component is missing template or render function: `, Component)
     }
   }
 }
 
-function getAttrsProxy(instance: ComponentInternalInstance): Data {
-  return (
-    instance.attrsProxy ||
-    (instance.attrsProxy = new Proxy(
-      instance.attrs,
-      __DEV__
-        ? {
-            get(target, key: string) {
-              markAttrsAccessed()
-              track(instance, TrackOpTypes.GET, '$attrs')
-              return target[key]
-            },
-            set() {
-              warn(`setupContext.attrs is readonly.`)
-              return false
-            },
-            deleteProperty() {
-              warn(`setupContext.attrs is readonly.`)
-              return false
-            },
-          }
-        : {
-            get(target, key: string) {
-              track(instance, TrackOpTypes.GET, '$attrs')
-              return target[key]
-            },
-          },
-    ))
-  )
-}
+const attrsProxyHandlers = __DEV__
+  ? {
+      get(target: Data, key: string) {
+        markAttrsAccessed()
+        track(target, TrackOpTypes.GET, '')
+        return target[key]
+      },
+      set() {
+        warn(`setupContext.attrs is readonly.`)
+        return false
+      },
+      deleteProperty() {
+        warn(`setupContext.attrs is readonly.`)
+        return false
+      },
+    }
+  : {
+      get(target: Data, key: string) {
+        track(target, TrackOpTypes.GET, '')
+        return target[key]
+      },
+    }
 
 /**
  * Dev-only
@@ -1081,9 +1082,13 @@ export function createSetupContext(
   if (__DEV__) {
     // We use getters in dev in case libs like test-utils overwrite instance
     // properties (overwrites should not be done in prod)
+    let attrsProxy: Data
     return Object.freeze({
       get attrs() {
-        return getAttrsProxy(instance)
+        return (
+          attrsProxy ||
+          (attrsProxy = new Proxy(instance.attrs, attrsProxyHandlers))
+        )
       },
       get slots() {
         return getSlotsProxy(instance)
@@ -1095,9 +1100,7 @@ export function createSetupContext(
     })
   } else {
     return {
-      get attrs() {
-        return getAttrsProxy(instance)
-      },
+      attrs: new Proxy(instance.attrs, attrsProxyHandlers),
       slots: instance.slots,
       emit: instance.emit,
       expose,
@@ -1105,7 +1108,9 @@ export function createSetupContext(
   }
 }
 
-export function getExposeProxy(instance: ComponentInternalInstance) {
+export function getComponentPublicInstance(
+  instance: ComponentInternalInstance,
+) {
   if (instance.exposed) {
     return (
       instance.exposeProxy ||
@@ -1122,6 +1127,8 @@ export function getExposeProxy(instance: ComponentInternalInstance) {
         },
       }))
     )
+  } else {
+    return instance.proxy
   }
 }
 

@@ -60,6 +60,15 @@ function getTargetType(value: Target) {
 // only unwrap nested ref
 export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRefSimple<T>
 
+declare const ReactiveMarkerSymbol: unique symbol
+
+export declare class ReactiveMarker {
+  private [ReactiveMarkerSymbol]?: void
+}
+
+export type Reactive<T> = UnwrapNestedRefs<T> &
+  (T extends readonly any[] ? ReactiveMarker : {})
+
 /**
  * Returns a reactive proxy of the object.
  * 返回一个响应式代理对象
@@ -77,7 +86,7 @@ export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRefSimple<T>
  * @param target - The source object.
  * @see {@link https://vuejs.org/api/reactivity-core.html#reactive}
  */
-export function reactive<T extends object>(target: T): UnwrapNestedRefs<T>
+export function reactive<T extends object>(target: T): Reactive<T>
 export function reactive(target: object) {
   // if trying to observe a readonly proxy, return the readonly version.
   // 如果尝试观察一个只读代理，就返回只读版本
@@ -140,7 +149,7 @@ export function shallowReactive<T extends object>(
 }
 
 type Primitive = string | number | boolean | bigint | symbol | undefined | null
-type Builtin = Primitive | Function | Date | Error | RegExp
+export type Builtin = Primitive | Function | Date | Error | RegExp
 export type DeepReadonly<T> = T extends Builtin
   ? T
   : T extends Map<infer K, infer V>
@@ -254,7 +263,11 @@ function createReactiveObject(
 ) {
   if (!isObject(target)) {
     if (__DEV__) {
-      warn(`value cannot be made reactive: ${String(target)}`)
+      warn(
+        `value cannot be made ${isReadonly ? 'readonly' : 'reactive'}: ${String(
+          target,
+        )}`,
+      )
     }
     return target
   }
@@ -340,8 +353,8 @@ export function isShallow(value: unknown): boolean {
  * @param value - The value to check.
  * @see {@link https://vuejs.org/api/reactivity-utilities.html#isproxy}
  */
-export function isProxy(value: unknown): boolean {
-  return isReactive(value) || isReadonly(value)
+export function isProxy(value: any): boolean {
+  return value ? !!value[ReactiveFlags.RAW] : false
 }
 
 /**
@@ -420,5 +433,5 @@ export const toReactive = <T extends unknown>(value: T): T =>
  *
  * @param value - The value for which a readonly proxy shall be created.
  */
-export const toReadonly = <T extends unknown>(value: T): T =>
-  isObject(value) ? readonly(value) : value
+export const toReadonly = <T extends unknown>(value: T): DeepReadonly<T> =>
+  isObject(value) ? readonly(value) : (value as DeepReadonly<T>)
