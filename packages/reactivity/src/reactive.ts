@@ -29,9 +29,9 @@ export const readonlyMap = new WeakMap<Target, any>()
 export const shallowReadonlyMap = new WeakMap<Target, any>()
 
 enum TargetType {
-  INVALID = 0,
-  COMMON = 1,
-  COLLECTION = 2,
+  INVALID = 0,  // 对象可跳过、不可扩展
+  COMMON = 1, // 对象和数组
+  COLLECTION = 2, // map、set、weakmap、weakset
 }
 
 function targetTypeMap(rawType: string) {
@@ -257,10 +257,11 @@ export function shallowReadonly<T extends object>(target: T): Readonly<T> {
 function createReactiveObject(
   target: Target, // 源数据
   isReadonly: boolean, // 是否是只读对象
-  baseHandlers: ProxyHandler<any>,
-  collectionHandlers: ProxyHandler<any>,
+  baseHandlers: ProxyHandler<any>, // 对象和数组的代理方法
+  collectionHandlers: ProxyHandler<any>, // map、set、weakmap、weakset代理方法
   proxyMap: WeakMap<Target, any>,
 ) {
+  // 如果不是对象，且是开发环境，就警告
   if (!isObject(target)) {
     if (__DEV__) {
       warn(
@@ -273,6 +274,7 @@ function createReactiveObject(
   }
   // target is already a Proxy, return it.
   // exception: calling readonly() on a reactive object
+  // 如果本来就是响应式对象，且是可读的，直接返回
   if (
     target[ReactiveFlags.RAW] &&
     !(isReadonly && target[ReactiveFlags.IS_REACTIVE])
@@ -287,6 +289,7 @@ function createReactiveObject(
   }
   // only specific value types can be observed.
   // 只能观察特定的值类型
+  // 如果是targetType是0，表示对象可跳过、不可扩展，则直接返回原数据
   const targetType = getTargetType(target)
   if (targetType === TargetType.INVALID) {
     return target
@@ -303,7 +306,7 @@ function createReactiveObject(
 /**
  * Checks if an object is a proxy created by {@link reactive()} or
  * {@link shallowReactive()} (or {@link ref()} in some cases).
- *
+ * 判断是否是响应式数据
  * @example
  * ```js
  * isReactive(reactive({}))            // => true

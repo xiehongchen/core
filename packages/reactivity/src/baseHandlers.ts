@@ -46,19 +46,25 @@ const builtInSymbols = new Set(
 const arrayInstrumentations = /*#__PURE__*/ createArrayInstrumentations()
 
 function createArrayInstrumentations() {
+  // Record，这个是ES6规格将键值对的数据结构称为Record
   const instrumentations: Record<string, Function> = {}
   // instrument identity-sensitive Array methods to account for possible reactive
-  // values
+  // 处理身份敏感的数组方法
   ;(['includes', 'indexOf', 'lastIndexOf'] as const).forEach(key => {
+    // 首先需要对includes、indexOf、lastIndexOf方法进行重载
     instrumentations[key] = function (this: unknown[], ...args: unknown[]) {
+      // 将代理对象转换成原始对象
       const arr = toRaw(this) as any
+      // 遍历数组并调用 track 方法，为每个元素添加依赖跟踪。
       for (let i = 0, l = this.length; i < l; i++) {
         track(arr, TrackOpTypes.GET, i + '')
       }
       // we run the method using the original args first (which may be reactive)
+      // 使用原始数组和原始参数调用方法
       const res = arr[key](...args)
       if (res === -1 || res === false) {
         // if that didn't work, run it again using raw values.
+        // 如果第一次调用返回 -1 或 false（表示未找到），则使用原始值再次调用方法
         return arr[key](...args.map(toRaw))
       } else {
         return res
@@ -67,16 +73,25 @@ function createArrayInstrumentations() {
   })
   // instrument length-altering mutation methods to avoid length being tracked
   // which leads to infinite loops in some cases (#2137)
+  // 处理长度改变的数组方法
   ;(['push', 'pop', 'shift', 'unshift', 'splice'] as const).forEach(key => {
+    // 对 push, pop, shift, unshift, splice 方法进行重载
     instrumentations[key] = function (this: unknown[], ...args: unknown[]) {
+      // 调用 pauseTracking 暂停依赖跟踪
       pauseTracking()
+      // 调用 pauseScheduling 暂停调度
       pauseScheduling()
+      // 使用原始数组和原始参数调用方法
       const res = (toRaw(this) as any)[key].apply(this, args)
+      // 调用 resetScheduling 和 resetTracking 恢复调度和依赖跟踪
       resetScheduling()
       resetTracking()
       return res
     }
   })
+  /**
+   * 先暂停依赖跟踪和调度更新，是为了避免在这些操作期间引发不必要的依赖收集和可能的无限循环
+   */
   return instrumentations
 }
 
@@ -88,8 +103,10 @@ function hasOwnProperty(this: object, key: unknown) {
   return obj.hasOwnProperty(key as string)
 }
 
+// 基础响应式处理类
 class BaseReactiveHandler implements ProxyHandler<Target> {
   constructor(
+    // 默认不是只读、深层次的
     protected readonly _isReadonly = false,
     protected readonly _isShallow = false,
   ) {}
@@ -115,21 +132,27 @@ class BaseReactiveHandler implements ProxyHandler<Target> {
               : reactiveMap
           ).get(target) ||
         // receiver is not the reactive proxy, but has the same prototype
+        // 接收器不是被动代理，而是具有相同的原型
         // this means the reciever is a user proxy of the reactive proxy
+        // 这意味着接收器是一个响应式代理的用户代理
         Object.getPrototypeOf(target) === Object.getPrototypeOf(receiver)
       ) {
         return target
       }
       // early return undefined
+      // 返回undifined
       return
     }
-
+    // 如果源数据是数组
     const targetIsArray = isArray(target)
 
     if (!isReadonly) {
+      // 是原生属性
       if (targetIsArray && hasOwn(arrayInstrumentations, key)) {
+        // 添加依赖追踪和调度更新
         return Reflect.get(arrayInstrumentations, key, receiver)
       }
+      // 获取原生属性
       if (key === 'hasOwnProperty') {
         return hasOwnProperty
       }
