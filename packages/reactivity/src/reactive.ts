@@ -58,10 +58,12 @@ function getTargetType(value: Target) {
 }
 
 // only unwrap nested ref
+// 仅展开嵌套的ref
 export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRefSimple<T>
 
+// 声明一个唯一的符号常量
 declare const ReactiveMarkerSymbol: unique symbol
-
+// 使用这个唯一的符号常量作为对象的键或属性标识符
 export declare class ReactiveMarker {
   private [ReactiveMarkerSymbol]?: void
 }
@@ -289,7 +291,7 @@ function createReactiveObject(
   }
   // only specific value types can be observed.
   // 只能观察特定的值类型
-  // 如果是targetType是0，表示对象可跳过、不可扩展，则直接返回原数据
+  // 如果是targetType是0，表示对象可跳过、不可扩展，则直接返回原数据，这表示该数据不应被转换为响应式数据
   const targetType = getTargetType(target)
   if (targetType === TargetType.INVALID) {
     return target
