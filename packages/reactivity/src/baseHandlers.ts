@@ -45,6 +45,7 @@ const builtInSymbols = new Set(
 
 const arrayInstrumentations = /*#__PURE__*/ createArrayInstrumentations()
 
+// 数组方法重写机制
 function createArrayInstrumentations() {
   // Record，这个是ES6规格将键值对的数据结构称为Record
   const instrumentations: Record<string, Function> = {}
@@ -60,11 +61,11 @@ function createArrayInstrumentations() {
         track(arr, TrackOpTypes.GET, i + '')
       }
       // we run the method using the original args first (which may be reactive)
-      // 使用原始数组和原始参数调用方法
+      // 使用原始数组调用方法
       const res = arr[key](...args)
       if (res === -1 || res === false) {
         // if that didn't work, run it again using raw values.
-        // 如果第一次调用返回 -1 或 false（表示未找到），则使用原始值再次调用方法
+        // 如果第一次调用返回 -1 或 false（表示未找到），则使用原始参数再次调用方法
         return arr[key](...args.map(toRaw))
       } else {
         return res

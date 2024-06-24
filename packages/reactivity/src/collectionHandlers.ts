@@ -337,6 +337,7 @@ const [
   shallowReadonlyInstrumentations,
 ] = /* #__PURE__*/ createInstrumentations()
 
+// 创建收集类数组的的 proxy get handler
 function createInstrumentationGetter(isReadonly: boolean, shallow: boolean) {
   const instrumentations = shallow
     ? isReadonly

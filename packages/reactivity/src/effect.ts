@@ -25,6 +25,7 @@ export type DebuggerEventExtraInfo = {
 
 export let activeEffect: ReactiveEffect | undefined
 
+// 响应式副作用函数类
 export class ReactiveEffect<T = any> {
   active = true
   deps: Dep[] = []
@@ -235,12 +236,15 @@ export function stop(runner: ReactiveEffectRunner) {
 }
 
 export let shouldTrack = true
+// 用于存储暂停调度的计数
 export let pauseScheduleStack = 0
 
+// 依赖堆
 const trackStack: boolean[] = []
 
 /**
  * Temporarily pauses tracking.
+ * 暂时暂停跟踪
  */
 export function pauseTracking() {
   trackStack.push(shouldTrack)
@@ -249,6 +253,7 @@ export function pauseTracking() {
 
 /**
  * Re-enables effect tracking (if it was paused).
+ * 重新启用副作用跟踪（如果已暂停）
  */
 export function enableTracking() {
   trackStack.push(shouldTrack)
@@ -257,18 +262,22 @@ export function enableTracking() {
 
 /**
  * Resets the previous global effect tracking state.
+ * 重置以前的全局副作用跟踪状态
  */
 export function resetTracking() {
   const last = trackStack.pop()
   shouldTrack = last === undefined ? true : last
 }
 
+// 增加暂停调度的极速
 export function pauseScheduling() {
   pauseScheduleStack++
 }
 
+// 减少暂停调度的计数，并在计数为零时执行队列中的effect调度器函数
 export function resetScheduling() {
   pauseScheduleStack--
+  // 当暂停调度的计数为零且effect调度器队列不为空时，执行队列中的effect调度器函数并将其移出队列
   while (!pauseScheduleStack && queueEffectSchedulers.length) {
     queueEffectSchedulers.shift()!()
   }
